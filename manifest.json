@@ -1,0 +1,13 @@
+{
+  "name": "Notion plus",
+  "description": "Desktop notification for notion reminders",
+  "version": "1.0",
+  "manifest_version": 3,
+  "permissions": ["storage", "notifications", "identity"],
+  "action": {
+    "default_popup": "popup-sign-in.html"
+  },
+  "background": {
+    "service_worker": "bg-worker.js"
+  }
+}
