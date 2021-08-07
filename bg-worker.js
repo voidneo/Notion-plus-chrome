@@ -1,13 +1,13 @@
 const OAUTH_URL = "https://api.notion.com/v1/oauth/authorize";
-const CLIENT_ID = "465dc18a-d891-497f-a8e9-4bf725da5591";
+const CLIENT_ID = "";
 const REDIRECT_URL = chrome.identity.getRedirectURL();
 
 chrome.runtime.onInstalled.addListener(() => {
-	console.log("getRedirectURL():" + chrome.identity.getRedirectURL());
+	console.log("Redirect url:" + REDIRECT_URL);
 });
 
-async function authorize(sendResponse) {
-	return await chrome.identity
+function authorize(sendResponse) {
+	chrome.identity
 		.launchWebAuthFlow(
 			{
 				url: `${OAUTH_URL}?client_id=${CLIENT_ID}&redirect_url=${REDIRECT_URL}&response_type=code`,
@@ -22,11 +22,12 @@ async function authorize(sendResponse) {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 	if (request.message === "login") {
-		(async () => {
-			await authorize(sendResponse);
-			console.log("Auth executed");
-			return true;
-		})();
+		authorize(sendResponse);
+		console.log("Auth executed");
+		return true;
 	}
-	return true;
+	else {
+		console.log(request.message);
+		return false;
+	}
 });

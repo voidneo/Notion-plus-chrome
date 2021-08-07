@@ -1,6 +1,6 @@
 {
   "name": "Notion plus",
-  "description": "Desktop notification for notion reminders",
+  "description": "Desktop notifications for notion reminders",
   "version": "1.0",
   "manifest_version": 3,
   "permissions": ["storage", "notifications", "identity"],
