@@ -6,40 +6,27 @@ chrome.runtime.onInstalled.addListener(() => {
 	console.log("getRedirectURL():" + chrome.identity.getRedirectURL());
 });
 
-async function doAuth() {
-	let response = "";
-	chrome.identity.launchWebAuthFlow(
-		{
-			url: `${OAUTH_URL}?client_id=${CLIENT_ID}&redirect_url=${REDIRECT_URL}&response_type=code`,
-			interactive: true,
-		},
-		(redirect_url) => {
-			if (chrome.runtime.lastError) {
-				response = "error";
-			} else if (redirect_url.includes("access_denied")) {
-				response = "acces-denied"
-			} else {
-				response = redirect_url;
+async function authorize(sendResponse) {
+	return await chrome.identity
+		.launchWebAuthFlow(
+			{
+				url: `${OAUTH_URL}?client_id=${CLIENT_ID}&redirect_url=${REDIRECT_URL}&response_type=code`,
+				interactive: true,
+			},
+			(redirect_url) => {
+				sendResponse(redirect_url);
+				console.log("Response sent");
 			}
-		}
-	);
-
-	return response;
+		);
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 	if (request.message === "login") {
-		chrome.identity
-			.launchWebAuthFlow(
-				{
-					url: `${OAUTH_URL}?client_id=${CLIENT_ID}&redirect_url=${REDIRECT_URL}&response_type=code`,
-					interactive: true,
-				},
-				(redirect_url) => {
-					console.log("redirect_url: " + redirect_url);
-					sendResponse(redirect_url);
-				}
-			);
-		}
+		(async () => {
+			await authorize(sendResponse);
+			console.log("Auth executed");
+			return true;
+		})();
+	}
 	return true;
 });
