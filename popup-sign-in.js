@@ -1,6 +1,10 @@
+function doStuffWithToken(token) {
+	chrome.runtime.sendMessage({ message: "Response recieved: " + token }, console.log);
+}
+
+function clickHandler(evt) {
+	chrome.runtime.sendMessage({ message: "login" }, doStuffWithToken);
+}
+
 btnLogin = document.getElementById("btnLogin");
-btnLogin.addEventListener("click", (evt) => {
-	chrome.runtime.sendMessage({ message: "login" }, (response) => {
-		chrome.runtime.sendMessage({ message: "Response recieved" }, console.log);
-	});
-});
+btnLogin.addEventListener("click", clickHandler);
