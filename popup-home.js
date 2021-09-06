@@ -7,7 +7,7 @@ function handleSignOutResponse(response) {
 }
 
 function signOutBtnClickHandler(evt) {
-	sendMessage({ message: "sign_out" }, handleSignOutResponse);
+	sendMessage({ code: "sign_out" }, handleSignOutResponse);
 }
 
 btnSignOut = document.getElementById("btnSignOut");
