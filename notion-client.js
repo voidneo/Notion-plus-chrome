@@ -1,67 +1,49 @@
 importScripts("helper-functions.js");
 
 const Notion = (function () {
-    const Version = "2021-05-13";
+    const Version = "2021-08-16";
 
     const Url = {
         Authentication: "https://api.notion.com/v1/oauth/authorize",
         Authorization: "https://api.notion.com/v1/oauth/token",
-        Search: "https://api.notion.com/v1/search"
+        Search: "https://api.notion.com/v1/search",
+        GetBlock: "https://api.notion.com/v1/blocks",
+        Redirect: chrome.identity.getRedirectURL()
     };
 
     const Client = {
         Id: "",
         Secret: "",
-        TemporaryToken: null
+        TemporaryToken: null,
+        AccessToken: null
     };
 
-    async function getAccessTokenFromLocalStorage() {
-        let promiseFulfilled = false;
-        let data = new Promise((resolve, reject) => {
-            chrome.storage.local.get("notion_plus", (items) => {
-                if (typeof items.notion_plus !== "undefined") {
-                    resolve(items.notion_plus.access_token);
-                } else {
-                    resolve(null);
-                }
-            });
-        })
-        .then((token) => {
-            log("Fucking now it returns the value from storage, TOO FUCKING LATE");
-            promiseFulfilled = true;
-        });
-
-        let i = 0;
-        while(!promiseFulfilled) {
-            log("Sleeping: 100ms, times slept: " + ++i + ", promise fullfiled: " + promiseFulfilled);
-            await sleep(100);
-            log("Sleep is over, promise fullfiled: " + promiseFulfilled);
+    chrome.storage.local.get("notion_plus", (items) => {
+        if (isSet(items.notion_plus)) {
+            Client.AccessToken = items.notion_plus.access_token;
         }
+    });
 
-        log("Loop is over, promise fullfiled: " + promiseFulfilled);
-
-        return data;
-    }
-
-    async function middleFunc() {
-        return await getAccessTokenFromLocalStorage();
-    }
-
-    async function f() {
-        return await middleFunc();
+    function updateLocalAccessToken() {
+        chrome.storage.local.get("notion_plus", (items) => {
+            if (isSet(items.notion_plus)) {
+                Client.AccessToken = items.notion_plus.access_token;
+            } else {
+                Client.AccessToken = null;
+            }
+        });
     }
 
     function isSessionOpen() {
-        let token = f();
-        log("isSessionOpen(): " + token);
-        return typeof token === "string" ? true : false;
+        log("isSessionOpen(): " + Client.AccessToken);
+        return isValid(Client.AccessToken);
     }
 
     function authenticate(sendResponse) {
         chrome.identity
             .launchWebAuthFlow(
                 {
-                    url: `${Url.Authentication}?client_id=${Client.Id}&redirect_uri=${REDIRECT_URL}&response_type=code`,
+                    url: `${Url.Authentication}?client_id=${Client.Id}&redirect_uri=${Url.Redirect}&response_type=code`,
                     interactive: true,
                 },
                 (redirect_url) => {
@@ -110,7 +92,7 @@ const Notion = (function () {
             body: JSON.stringify({
                 grant_type: "authorization_code",
                 code: Client.TemporaryToken,
-                redirect_uri: REDIRECT_URL
+                redirect_uri: Url.Redirect
             })
         })
             .then((response) => response.json())
@@ -118,46 +100,67 @@ const Notion = (function () {
                 log(error.message);
             });
 
-        if (typeof response.access_token !== "undefined") {
+        if (isSet(response.access_token)) {
             chrome.storage.local.set({ notion_plus: response }, () => {
                 if (chrome.runtime.lastError) {
                     log(`Notion.Authorize(): ${chrome.runtime.lastError.message}`);
                 }
             });
+
+            Client.AccessToken = response.access_token;
             return "success";
         }
 
         return response.code;
     }
 
-    // Up to 100 pages
-    async function getPages() {
-        let accessToken = await getAccessTokenFromLocalStorage();
+    function clearSession() {
+        Client.AccessToken = null;
+    }
 
+    async function search(query, sort, filter, startCursor, maxPages) {
         // if no access token stored locally
-        if (typeof accessToken !== "string") return null;
+        if (!isValid(Client.AccessToken)) return {};
+        let body = {};
+
+        if (isSet(query) && query != null) {
+            body.query = query;
+        }
+        if (isSet(sort) && sort != null) {
+            body.sort = sort;
+        }
+        if (isSet(filter) && filter != null) {
+            body.filter = filter;
+        }
+        if (isSet(startCursor) && startCursor != null) {
+            body.start_cursor = startCursor;
+        }
+        if (isSet(maxPages) && maxPages != null) {
+            body.page_size = maxPages;
+        }
 
         let response = await fetch(Url.Search, {
             method: "POST",
             headers: {
-                "Authorization": `Bearer ${accessToken}`,
+                "Authorization": `Bearer ${Client.AccessToken}`,
                 "Content-Type": "application/json",
                 "Notion-Version": Version
             },
-            body: JSON.stringify({
-                filter: {
-                    value: "page",
-                    property: "object"
-                }
-            })
+            "body": JSON.stringify(body)
         })
-            .then(response => response.json())
-        
-        if(typeof response.results !== "undefined") {
-            return response;
-        }
+            .then(response => response.json());
 
-        return response.code;
+        return response;
+    }
+
+    // Up to 100 pages
+    async function getAllPages() {
+        // if no access token stored locally
+        if (!isValid(Client.AccessToken)) return null;
+
+        let response = await search(null, null, { value: "page", property: "object" });
+
+        return response;
 
         /* Invalid request / token response
         {
@@ -169,10 +172,59 @@ const Notion = (function () {
         */
     }
 
+    async function getBlock(blockId) {
+        if (!isValid(Client.AccessToken)) return null;
+
+        let response = await fetch(`${Url.GetBlock}/${blockId}`, {
+            method: "GET",
+            headers: {
+                "Authorization": `Bearer ${Client.AccessToken}`,
+                "Content-Type": "application/json",
+                "Notion-Version": Version
+            }
+        })
+            .then(response => response.json());
+
+        return response;
+    }
+
+    async function getBlockChildren(blockId, startCursor, maxBlocks) {
+        // if no access token stored locally
+        if (!isValid(Client.AccessToken) || !isSet(blockId) || blockId == null) return {};
+        
+        let params = {};
+
+        if (isSet(startCursor) && startCursor != null) {
+            params.start_cursor = startCursor;
+        }
+        if (isSet(maxBlocks) && maxBlocks != null) {
+            params.page_size = maxBlocks;
+        }
+
+        params = new URLSearchParams(params).toString();
+
+        let response = await fetch(`${Url.GetBlock}/${blockId}/children?${params}`, {
+            method: "GET",
+            headers: {
+                "Authorization": `Bearer ${Client.AccessToken}`,
+                "Content-Type": "application/json",
+                "Notion-Version": Version
+            }
+        })
+            .then(response => response.json());
+
+        return response;
+    }
+
     return Object.freeze({
         "Version": Version,
         "Authenticate": authenticate,
         "Authorize": authorize,
-        "IsSessionOpen": isSessionOpen
+        "IsSessionOpen": isSessionOpen,
+        "ClearSession": clearSession,
+        "Search": search,
+        "GetAllPages": getAllPages,
+        "GetBlock": getBlock,
+        "GetBlockChildren": getBlockChildren
     });
 })();

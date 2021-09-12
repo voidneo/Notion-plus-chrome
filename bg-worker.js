@@ -4,15 +4,11 @@ importScripts("notion-client.js");
 // TODO: Organize functions in objects
 
 chrome.runtime.onInstalled.addListener(() => {
-	log("Notion client:" + typeof Notion);
-	log("Redirect url:" + REDIRECT_URL);
 });
 
-function restoreSession(sendResponse) {
-	let t = Notion.IsSessionOpen();
-	log("restoreSession(): " + t);
-	if (t) {
-		sendResponse("success");
+async function restoreSession(sendResponse) {
+	if (Notion.IsSessionOpen()) {
+		sendResponse(await Notion.GetAllPages());
 	} else {
 		sendResponse("failure");
 	}
@@ -25,6 +21,7 @@ function signOut(sendResponse) {
 			sendMessage("failure");
 		} else {
 			log("signOut(): success");
+			Notion.ClearSession();
 			sendResponse("success");
 		}
 	});
