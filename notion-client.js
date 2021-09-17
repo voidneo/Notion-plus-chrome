@@ -18,6 +18,8 @@ const Notion = (function () {
         AccessToken: null
     };
 
+    let LastRequestTime = new Date(0).getTime();
+
     chrome.storage.local.get("notion_plus", (items) => {
         if (isSet(items.notion_plus)) {
             Client.AccessToken = items.notion_plus.access_token;
@@ -153,14 +155,37 @@ const Notion = (function () {
         return response;
     }
 
-    // Up to 100 pages
     async function getAllPages() {
         // if no access token stored locally
         if (!isValid(Client.AccessToken)) return null;
 
         let response = await search(null, null, { value: "page", property: "object" });
 
-        return response;
+        // if notion returned an error, return it
+        if (response.object !== "list")
+            return response;
+
+        // else, keep fetching pages as long there are search results
+        let data = [response];
+        let lastResponse = data[0];
+        let tries = 0;
+        while (lastResponse.has_more) {
+            response = await search(null, null, { value: "page", property: "object" }, lastResponse.next_cursor);
+
+            // if notion returned a list of results
+            if(response.object === "list") {
+                data.push(response);
+                lastResponse = response;
+            }
+            else {
+                if(tries++ >= 3) {
+                    log("Notion.GetAllPages(): Failed to fetch pages after 3 tries");
+                    return data;
+                }
+            }
+        }
+
+        return data;
 
         /* Invalid request / token response
         {
@@ -191,7 +216,7 @@ const Notion = (function () {
     async function getBlockChildren(blockId, startCursor, maxBlocks) {
         // if no access token stored locally
         if (!isValid(Client.AccessToken) || !isSet(blockId) || blockId == null) return {};
-        
+
         let params = {};
 
         if (isSet(startCursor) && startCursor != null) {

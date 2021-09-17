@@ -1,14 +1,41 @@
 importScripts("notion-client.js");
 
-// TODO: Organize constants in objects
-// TODO: Organize functions in objects
-
 chrome.runtime.onInstalled.addListener(() => {
 });
 
+async function fetchAndStorePages() {
+	let pages = await Notion.GetAllPages();
+
+	// If it's not an array, it's an error
+	if (Object.prototype.toString.call(pages) !== "[object Array]") {
+		// TODO: something, idk
+		return;
+	}
+
+	// Store pages locally
+	chrome.storage.local.set({ "pages": pages }, () => {
+		if (chrome.runtime.lastError) {
+			log(`fetchAndStorePages(): ${chrome.runtime.lastError.message}`);
+		} else {
+			log("fetchAndStorePages(): success");
+		}
+	});
+}
+
+async function getAllChildren(pageId) {
+	let response = await Notion.GetBlockChildren(pageId);
+
+	// if notion returned an error, return it
+	if (response.object !== "list")
+		return response;
+
+	// fetch and scan for remiders before fetching again perhaps? so as to waste time
+	// to help avoid notion's 3 requests/sec limit
+}
+
 async function restoreSession(sendResponse) {
 	if (Notion.IsSessionOpen()) {
-		sendResponse(await Notion.GetAllPages());
+		sendResponse("success");
 	} else {
 		sendResponse("failure");
 	}
